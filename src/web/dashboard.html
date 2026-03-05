@@ -56,6 +56,65 @@
             opacity: 0.4;
             cursor: not-allowed;
         }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 14px;
+            align-items: center;
+            margin: 12px 0 14px;
+        }
+
+        .group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .group label {
+            font-size: 13px;
+            color: #444;
+            min-width: 85px;
+        }
+
+        select,
+        button,
+        input {
+            height: 32px;
+            border: 1px solid #d0d0d0;
+            border-radius: 8px;
+            padding: 0 10px;
+            background: #fff;
+        }
+
+        button {
+            cursor: pointer;
+            background: #f6f6f6;
+        }
+
+        button:hover:enabled {
+            background: #ececec;
+        }
+
+        .pill {
+            border: 1px solid #ddd;
+            background: #fafafa;
+            max-width: 520px;
+            /* itt szabályozod mennyire férjen el */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            /* ... */
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+            font-size: 12px;
+            padding: 6px 10px;
+        }
+
+        @media (max-width: 900px) {
+            .pill {
+                max-width: 100%;
+            }
+        }
     </style>
 </head>
 
@@ -65,25 +124,34 @@
         style="display:none; padding:10px; margin:10px 0; border:1px solid #f5c2c7; background:#f8d7da; color:#842029;">
     </div>
 
-    <div class="row">
-        <label>Data source:</label>
-        <select id="source">
-            <option value="local" selected>Local (SQLite)</option>
-            <option value="db2">PUB400 (DB2)</option>
-        </select>
-        <label>Status filter:</label>
-        <select id="status">
-            <option value="">(all)</option>
-            <option>READY</option>
-            <option>REJECTED</option>
-            <option>VALIDATED</option>
-            <option>ARCHIVED</option>
-            <option>ERROR</option>
-        </select>
+    <div class="toolbar">
+        <div class="group">
+            <label>Data source:</label>
+            <select id="source">
+                <option value="local">Local (SQLite)</option>
+                <option value="db2">DB2 (IBM i)</option>
+            </select>
 
-        <button onclick="loadInvoices()">Refresh</button><button onclick="runPipeline()">Run pipeline</button><button
-            onclick="runIbmi()">Run IBM i (stub)</button><button onclick="ibmiDiscovery()">IBM i discovery</button>
-        <span class="pill" id="metrics">metrics: ...</span>
+            <label>Status filter:</label>
+            <select id="statusFilter">
+                <option value="">(all)</option>
+                <option>READY</option>
+                <option>REJECTED</option>
+                <option>VALIDATED</option>
+                <option>ARCHIVED</option>
+                <option>ERROR</option>
+            </select>
+
+        </div>
+
+        <div class="group">
+            <button onclick="loadInvoices()">Refresh</button>
+            <button onclick="runPipeline()">Run pipeline</button>
+            <button onclick="runIbmi()">Run IBM i (stub)</button>
+            <button onclick="ibmiDiscovery()">IBM i discovery</button>
+        </div>
+
+        <span class="pill" id="metrics" title="metrics">metrics: ...</span>
     </div>
 
     <div class="row">
@@ -137,63 +205,69 @@
             return allowed.includes(toStatus);
         }
 
-        async function loadMetrics() {
-            const source = document.getElementById("source").value;
 
-            if (source !== "local") {
-                document.getElementById("metrics").innerText = "metrics: (DB2 mode - n/a)";
-                return;
-            }
+        async function loadMetrics(isDb2) {
+            const el = document.getElementById("metrics");
 
             try {
+                if (isDb2) {
+                    el.innerText = "metrics: (DB2 mode - n/a)";
+                    el.title = el.innerText;
+                    return;
+                }
+
                 const r = await fetch(`${apiBase}/metrics`);
                 const data = await r.json();
-                document.getElementById("metrics").innerText = "metrics: " + JSON.stringify(data);
+                const txt = "metrics: " + JSON.stringify(data);
+                el.innerText = txt;
+                el.title = txt;
             } catch (e) {
                 showError("Failed to load metrics: " + e.message);
             }
         }
+
         async function loadInvoices() {
             clearError();
 
-            const source = document.getElementById("source").value;
-            const status = document.getElementById("status").value;
+            const source = document.getElementById("source").value;   // "local" | "db2"
+            const isDb2 = (source === "db2");
 
-            let url = "";
-            if (source === "local") {
-                url = status ? `${apiBase}/invoices?status=${encodeURIComponent(status)}` : `${apiBase}/invoices`;
-            } else {
-                url = `${apiBase}/ibmi/invoices`; // DB2 list (no filter yet)
-            }
+            const status = document.getElementById("statusFilter").value; // "", "READY", ...
+            const base = isDb2 ? "/ibmi" : ""; // DB2: /ibmi/invoices, Local: /invoices
+
+            const url =
+                status
+                    ? `${apiBase}${base}/invoices?status=${encodeURIComponent(status)}`
+                    : `${apiBase}${base}/invoices`;
 
             try {
                 const r = await fetch(url);
                 const items = await r.json();
+
                 const tbody = document.getElementById("tbody");
                 tbody.innerHTML = "";
-                for (const inv of items) {
-                    const source = document.getElementById("source").value;
-                    const isDb2 = (source === "db2");
 
+                for (const inv of items) {
                     const ts = inv.timestamp || inv.created_at || "";
 
                     const tr = document.createElement("tr");
                     tr.innerHTML = `
-                        <td>${inv.id}</td>
-                        <td>${ts}</td>
-                        <td>${inv.original_name}</td>
-                        <td>${inv.status}</td>
-                        <td>${inv.final_name}</td>
-                        <td>
-                            <button ${(!isDb2 && canTransition(inv.status, "VALIDATED")) ? "" : "disabled"} data-id="${inv.id}" data-action="VALIDATED">VALIDATE</button>
-                            <button ${(!isDb2 && canTransition(inv.status, "ARCHIVED")) ? "" : "disabled"} data-id="${inv.id}" data-action="ARCHIVED">ARCHIVE</button>
-                            <button ${(!isDb2 && canTransition(inv.status, "ERROR")) ? "" : "disabled"} data-id="${inv.id}" data-action="ERROR">ERROR</button>
-                            <button ${isDb2 ? "disabled" : ""} data-id="${inv.id}" data-action="history">History</button>
-                        </td>
-                    `;
+                <td>${inv.id}</td>
+                <td>${ts}</td>
+                <td>${inv.original_name}</td>
+                <td>${inv.status}</td>
+                <td>${inv.final_name}</td>
+                <td>
+                    <button ${(!isDb2 && canTransition(inv.status, "VALIDATED")) ? "" : "disabled"} data-id="${inv.id}" data-action="VALIDATED">VALIDATE</button>
+                    <button ${(!isDb2 && canTransition(inv.status, "ARCHIVED")) ? "" : "disabled"} data-id="${inv.id}" data-action="ARCHIVED">ARCHIVE</button>
+                    <button ${(!isDb2 && canTransition(inv.status, "ERROR")) ? "" : "disabled"} data-id="${inv.id}" data-action="ERROR">ERROR</button>
+                    <button ${isDb2 ? "disabled" : ""} data-id="${inv.id}" data-action="history">History</button>
+                </td>
+            `;
                     tbody.appendChild(tr);
                 }
-                await loadMetrics();
+
+                await loadMetrics(isDb2);
             } catch (e) {
                 showError("Failed to load invoices: " + e.message);
             }
@@ -201,13 +275,24 @@
 
         async function setStatus(id, status) {
             clearError();
+
+            const source = document.getElementById("source").value;
+            const isDb2 = (source === "db2");
+
+            if (isDb2) {
+                showError("DB2 mode: status update nincs bekötve még. Válts Local (SQLite) módra, ha kattintani akarsz.");
+                return;
+            }
+
             try {
                 const r = await fetch(`${apiBase}/invoices/${id}/status?status=${encodeURIComponent(status)}`, { method: "PATCH" });
                 const data = await r.json();
+
                 if (!r.ok || data.error) {
                     showError(`Update failed for invoice ${id}: ${JSON.stringify(data)}`);
                     return;
                 }
+
                 await loadInvoices();
             } catch (e) {
                 showError("Failed to update status: " + e.message);
@@ -288,6 +373,7 @@
             });
 
             document.getElementById("source").addEventListener("change", loadInvoices);
+            document.getElementById("statusFilter").addEventListener("change", loadInvoices);
             loadInvoices();
         });
     </script>
