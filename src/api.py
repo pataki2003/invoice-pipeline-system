@@ -249,14 +249,6 @@ def ibmi_discovery():
         "next_step": "Collect access details and choose ODBC or SSH approach."
     }
 
-@app.get("/ibmi/db2/ping")
-def ibmi_db2_ping():
-    log_line("API", "INFO", "ibmi db2 ping requested")
-    try:
-        return db2_ping()
-    except Exception as e:
-        log_line("API", "ERROR", f"ibmi db2 ping failed: {e}")
-        return {"error": str(e)}
     
 @app.get("/ibmi/invoices")
 def ibmi_invoices(limit: int = Query(default=50, ge=1, le=500)):
