@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse
 import os
 from src.logger import get_request_id
 import time
-from src.ibmi.db2_client import ping as db2_ping
+from .ibmi.db2_reader import list_invoices as db2_list_invoices
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -256,4 +256,14 @@ def ibmi_db2_ping():
         return db2_ping()
     except Exception as e:
         log_line("API", "ERROR", f"ibmi db2 ping failed: {e}")
+        return {"error": str(e)}
+    
+@app.get("/ibmi/invoices")
+def ibmi_invoices(limit: int = Query(default=50, ge=1, le=500)):
+    log_line("API", "INFO", f"ibmi_invoices limit={limit}")
+    try:
+        items = db2_list_invoices(limit=limit)
+        return items
+    except Exception as e:
+        log_line("API", "ERROR", f"ibmi_invoices failed: {e}")
         return {"error": str(e)}
