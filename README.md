@@ -93,6 +93,7 @@ rejected
 index.db
 
 logs/
+
 ---
 
 # Running the API
