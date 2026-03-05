@@ -72,3 +72,69 @@ DB2 for i via ODBC
 ---
 
 # Project Structure
+src/
+api.py
+pipeline.py
+logger.py
+
+services/
+invoice_service.py
+
+repositories/
+invoice_repository.py
+
+ibmi/
+db2_client.py
+
+data/
+dropzone_in
+ready
+rejected
+index.db
+
+logs/
+---
+
+# Running the API
+
+Start server:
+python -m uvicorn src.api
+
+
+---
+
+# Running the Pipeline
+
+
+python src/pipeline.py
+
+
+Processes files from:
+
+
+data/dropzone_in
+
+
+---
+
+# Admin Dashboard
+
+Simple HTML dashboard for managing invoices.
+
+Features:
+
+- view invoices
+- change invoice status
+- view metrics
+- view history
+- run pipeline
+
+---
+
+# Future Work
+
+- IBM i DB2 integration
+- ODBC DSN configuration
+- invoice synchronization with DB2
+- improved UI
+- authentication
