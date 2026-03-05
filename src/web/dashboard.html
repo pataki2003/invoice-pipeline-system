@@ -66,6 +66,11 @@
     </div>
 
     <div class="row">
+        <label>Data source:</label>
+        <select id="source">
+            <option value="local" selected>Local (SQLite)</option>
+            <option value="db2">PUB400 (DB2)</option>
+        </select>
         <label>Status filter:</label>
         <select id="status">
             <option value="">(all)</option>
@@ -107,6 +112,7 @@
 
     <script>
         const apiBase = ""; // same host
+
         function showError(msg) {
             const b = document.getElementById("banner");
             b.style.display = "block";
@@ -132,106 +138,158 @@
         }
 
         async function loadMetrics() {
-            const r = await fetch(`${apiBase}/metrics`);
-            const data = await r.json();
-            document.getElementById("metrics").innerText = "metrics: " + JSON.stringify(data);
-        }
+            const source = document.getElementById("source").value;
 
-        async function loadInvoices() {
-            const status = document.getElementById("status").value;
-            const url = status ? `${apiBase}/invoices?status=${encodeURIComponent(status)}` : `${apiBase}/invoices`;
-            const r = await fetch(url);
-            const items = await r.json();
-
-            const tbody = document.getElementById("tbody");
-            tbody.innerHTML = "";
-
-            for (const inv of items) {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-      <td>${inv.id}</td>
-      <td>${inv.timestamp}</td>
-      <td>${inv.original_name}</td>
-      <td>${inv.status}</td>
-      <td>${inv.final_name}</td>
-     <td>
-        <button ${canTransition(inv.status, "VALIDATED") ? "" : "disabled"} onclick="setStatus(${inv.id}, 'VALIDATED')">VALIDATE</button>
-        <button ${canTransition(inv.status, "ARCHIVED") ? "" : "disabled"} onclick="setStatus(${inv.id}, 'ARCHIVED')">ARCHIVE</button>
-        <button ${canTransition(inv.status, "ERROR") ? "" : "disabled"} onclick="setStatus(${inv.id}, 'ERROR')">ERROR</button>
-        <button onclick="showHistory(${inv.id})">History</button>
-    </td>
-    `;
-                tbody.appendChild(tr);
+            if (source !== "local") {
+                document.getElementById("metrics").innerText = "metrics: (DB2 mode - n/a)";
+                return;
             }
 
-            await loadMetrics();
+            try {
+                const r = await fetch(`${apiBase}/metrics`);
+                const data = await r.json();
+                document.getElementById("metrics").innerText = "metrics: " + JSON.stringify(data);
+            } catch (e) {
+                showError("Failed to load metrics: " + e.message);
+            }
+        }
+        async function loadInvoices() {
+            clearError();
+
+            const source = document.getElementById("source").value;
+            const status = document.getElementById("status").value;
+
+            let url = "";
+            if (source === "local") {
+                url = status ? `${apiBase}/invoices?status=${encodeURIComponent(status)}` : `${apiBase}/invoices`;
+            } else {
+                url = `${apiBase}/ibmi/invoices`; // DB2 list (no filter yet)
+            }
+
+            try {
+                const r = await fetch(url);
+                const items = await r.json();
+                const tbody = document.getElementById("tbody");
+                tbody.innerHTML = "";
+                for (const inv of items) {
+                    const source = document.getElementById("source").value;
+                    const isDb2 = (source === "db2");
+
+                    const ts = inv.timestamp || inv.created_at || "";
+
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td>${inv.id}</td>
+                        <td>${ts}</td>
+                        <td>${inv.original_name}</td>
+                        <td>${inv.status}</td>
+                        <td>${inv.final_name}</td>
+                        <td>
+                            <button ${(!isDb2 && canTransition(inv.status, "VALIDATED")) ? "" : "disabled"} data-id="${inv.id}" data-action="VALIDATED">VALIDATE</button>
+                            <button ${(!isDb2 && canTransition(inv.status, "ARCHIVED")) ? "" : "disabled"} data-id="${inv.id}" data-action="ARCHIVED">ARCHIVE</button>
+                            <button ${(!isDb2 && canTransition(inv.status, "ERROR")) ? "" : "disabled"} data-id="${inv.id}" data-action="ERROR">ERROR</button>
+                            <button ${isDb2 ? "disabled" : ""} data-id="${inv.id}" data-action="history">History</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+                await loadMetrics();
+            } catch (e) {
+                showError("Failed to load invoices: " + e.message);
+            }
         }
 
         async function setStatus(id, status) {
             clearError();
-
-            const r = await fetch(`${apiBase}/invoices/${id}/status?status=${encodeURIComponent(status)}`, { method: "PATCH" });
-            const data = await r.json();
-
-            if (!r.ok || data.error) {
-                showError(`Update failed for invoice ${id}: ${JSON.stringify(data)}`);
-                return;
+            try {
+                const r = await fetch(`${apiBase}/invoices/${id}/status?status=${encodeURIComponent(status)}`, { method: "PATCH" });
+                const data = await r.json();
+                if (!r.ok || data.error) {
+                    showError(`Update failed for invoice ${id}: ${JSON.stringify(data)}`);
+                    return;
+                }
+                await loadInvoices();
+            } catch (e) {
+                showError("Failed to update status: " + e.message);
             }
-
-            await loadInvoices();
         }
 
         async function manualUpdate() {
             const id = document.getElementById("manualId").value.trim();
             const status = document.getElementById("manualStatus").value.trim();
-
             if (!id || !status) {
                 showError("Manual test: please fill invoice id and status");
                 return;
             }
-
-            await setStatus(id, status); // ugyanazt a logikát használjuk
+            await setStatus(id, status);
         }
 
         async function showHistory(id) {
-            const r = await fetch(`${apiBase}/invoices/${id}/history`);
-            const data = await r.json();
-            document.getElementById("history").innerText = JSON.stringify(data, null, 2);
+            try {
+                const r = await fetch(`${apiBase}/invoices/${id}/history`);
+                const data = await r.json();
+                document.getElementById("history").innerText = JSON.stringify(data, null, 2);
+            } catch (e) {
+                showError("Failed to load history: " + e.message);
+            }
         }
 
         async function runPipeline() {
             clearError();
-
-            const r = await fetch("/pipeline/run", { method: "POST" });
-            const data = await r.json();
-
-            if (!r.ok || data.error) {
-                showError(JSON.stringify(data));
-                return;
+            try {
+                const r = await fetch("/pipeline/run", { method: "POST" });
+                const data = await r.json();
+                if (!r.ok || data.error) {
+                    showError(JSON.stringify(data));
+                    return;
+                }
+                await loadInvoices();
+            } catch (e) {
+                showError("Failed to run pipeline: " + e.message);
             }
-
-            await loadInvoices();
         }
 
         async function runIbmi() {
             clearError();
-            const r = await fetch("/ibmi/run", { method: "POST" });
-            const data = await r.json();
-            if (!r.ok || data.error) {
-                showError(JSON.stringify(data));
-                return;
+            try {
+                const r = await fetch("/ibmi/run", { method: "POST" });
+                const data = await r.json();
+                if (!r.ok || data.error) {
+                    showError(JSON.stringify(data));
+                }
+            } catch (e) {
+                showError("Failed to run IBM i: " + e.message);
             }
         }
 
         async function ibmiDiscovery() {
             clearError();
-            const r = await fetch("/ibmi/discovery");
-            const data = await r.json();
-            document.getElementById("history").innerText = JSON.stringify(data, null, 2);
+            try {
+                const r = await fetch("/ibmi/discovery");
+                const data = await r.json();
+                document.getElementById("history").innerText = JSON.stringify(data, null, 2);
+            } catch (e) {
+                showError("Failed to run IBM i discovery: " + e.message);
+            }
         }
 
-        clearError();
-        loadInvoices();
+        // Event listeners
+        document.addEventListener("DOMContentLoaded", () => {
+            document.getElementById("tbody").addEventListener("click", (e) => {
+                if (e.target.tagName === "BUTTON") {
+                    const id = e.target.dataset.id;
+                    const action = e.target.dataset.action;
+                    if (action === "history") {
+                        showHistory(id);
+                    } else {
+                        setStatus(id, action);
+                    }
+                }
+            });
+
+            document.getElementById("source").addEventListener("change", loadInvoices);
+            loadInvoices();
+        });
     </script>
 </body>
 
