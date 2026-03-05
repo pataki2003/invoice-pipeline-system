@@ -1,0 +1,238 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Invoice Admin</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 24px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+
+        th {
+            background: #f3f3f3;
+            text-align: left;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        select,
+        button {
+            padding: 6px 10px;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #eee;
+        }
+
+        pre {
+            background: #111;
+            color: #0f0;
+            padding: 12px;
+            overflow: auto;
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Invoice Admin</h1>
+    <div id="banner"
+        style="display:none; padding:10px; margin:10px 0; border:1px solid #f5c2c7; background:#f8d7da; color:#842029;">
+    </div>
+
+    <div class="row">
+        <label>Status filter:</label>
+        <select id="status">
+            <option value="">(all)</option>
+            <option>READY</option>
+            <option>REJECTED</option>
+            <option>VALIDATED</option>
+            <option>ARCHIVED</option>
+            <option>ERROR</option>
+        </select>
+
+        <button onclick="loadInvoices()">Refresh</button><button onclick="runPipeline()">Run pipeline</button><button
+            onclick="runIbmi()">Run IBM i (stub)</button><button onclick="ibmiDiscovery()">IBM i discovery</button>
+        <span class="pill" id="metrics">metrics: ...</span>
+    </div>
+
+    <div class="row">
+        <label>Manual test:</label>
+        <input id="manualId" placeholder="invoice id" style="padding:6px 10px; width:120px;">
+        <input id="manualStatus" placeholder="status (e.g. READY)" style="padding:6px 10px; width:180px;">
+        <button onclick="manualUpdate()">Send</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Timestamp</th>
+                <th>Original</th>
+                <th>Status</th>
+                <th>Final</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+    </table>
+
+    <h3>Selected invoice history</h3>
+    <pre id="history">(click "History")</pre>
+
+    <script>
+        const apiBase = ""; // same host
+        function showError(msg) {
+            const b = document.getElementById("banner");
+            b.style.display = "block";
+            b.textContent = msg;
+        }
+
+        function clearError() {
+            const b = document.getElementById("banner");
+            b.style.display = "none";
+            b.textContent = "";
+        }
+
+        const transitions = {
+            "READY": ["VALIDATED", "ERROR"],
+            "VALIDATED": ["ARCHIVED", "ERROR"],
+            "ERROR": ["VALIDATED"],
+            "ARCHIVED": []
+        };
+
+        function canTransition(fromStatus, toStatus) {
+            const allowed = transitions[fromStatus] || [];
+            return allowed.includes(toStatus);
+        }
+
+        async function loadMetrics() {
+            const r = await fetch(`${apiBase}/metrics`);
+            const data = await r.json();
+            document.getElementById("metrics").innerText = "metrics: " + JSON.stringify(data);
+        }
+
+        async function loadInvoices() {
+            const status = document.getElementById("status").value;
+            const url = status ? `${apiBase}/invoices?status=${encodeURIComponent(status)}` : `${apiBase}/invoices`;
+            const r = await fetch(url);
+            const items = await r.json();
+
+            const tbody = document.getElementById("tbody");
+            tbody.innerHTML = "";
+
+            for (const inv of items) {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+      <td>${inv.id}</td>
+      <td>${inv.timestamp}</td>
+      <td>${inv.original_name}</td>
+      <td>${inv.status}</td>
+      <td>${inv.final_name}</td>
+     <td>
+        <button ${canTransition(inv.status, "VALIDATED") ? "" : "disabled"} onclick="setStatus(${inv.id}, 'VALIDATED')">VALIDATE</button>
+        <button ${canTransition(inv.status, "ARCHIVED") ? "" : "disabled"} onclick="setStatus(${inv.id}, 'ARCHIVED')">ARCHIVE</button>
+        <button ${canTransition(inv.status, "ERROR") ? "" : "disabled"} onclick="setStatus(${inv.id}, 'ERROR')">ERROR</button>
+        <button onclick="showHistory(${inv.id})">History</button>
+    </td>
+    `;
+                tbody.appendChild(tr);
+            }
+
+            await loadMetrics();
+        }
+
+        async function setStatus(id, status) {
+            clearError();
+
+            const r = await fetch(`${apiBase}/invoices/${id}/status?status=${encodeURIComponent(status)}`, { method: "PATCH" });
+            const data = await r.json();
+
+            if (!r.ok || data.error) {
+                showError(`Update failed for invoice ${id}: ${JSON.stringify(data)}`);
+                return;
+            }
+
+            await loadInvoices();
+        }
+
+        async function manualUpdate() {
+            const id = document.getElementById("manualId").value.trim();
+            const status = document.getElementById("manualStatus").value.trim();
+
+            if (!id || !status) {
+                showError("Manual test: please fill invoice id and status");
+                return;
+            }
+
+            await setStatus(id, status); // ugyanazt a logikát használjuk
+        }
+
+        async function showHistory(id) {
+            const r = await fetch(`${apiBase}/invoices/${id}/history`);
+            const data = await r.json();
+            document.getElementById("history").innerText = JSON.stringify(data, null, 2);
+        }
+
+        async function runPipeline() {
+            clearError();
+
+            const r = await fetch("/pipeline/run", { method: "POST" });
+            const data = await r.json();
+
+            if (!r.ok || data.error) {
+                showError(JSON.stringify(data));
+                return;
+            }
+
+            await loadInvoices();
+        }
+
+        async function runIbmi() {
+            clearError();
+            const r = await fetch("/ibmi/run", { method: "POST" });
+            const data = await r.json();
+            if (!r.ok || data.error) {
+                showError(JSON.stringify(data));
+                return;
+            }
+        }
+
+        async function ibmiDiscovery() {
+            clearError();
+            const r = await fetch("/ibmi/discovery");
+            const data = await r.json();
+            document.getElementById("history").innerText = JSON.stringify(data, null, 2);
+        }
+
+        clearError();
+        loadInvoices();
+    </script>
+</body>
+
+</html>
