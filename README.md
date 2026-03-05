@@ -1,141 +1,129 @@
-# Invoice Pipeline System
+# Invoice Pipeline
 
-A small backend system that simulates an enterprise-style invoice processing workflow.
+Enterprise-style invoice processing pipeline with IBM i integration.
 
-The project processes incoming invoice files, stores them in a database, exposes a REST API for status management, and provides an admin dashboard for manual control.
-
-This project is also designed as preparation for IBM i (PUB400) integration.
+This project simulates a realistic backend integration system.
 
 ---
 
 # Features
 
-File processing pipeline
-
-- scans incoming files
-- validates invoice naming format
-- moves files to READY or REJECTED folders
-- stores records in a database
-
-REST API
-
-- list invoices
-- update invoice status
-- view status history
-- view metrics
-- run pipeline from API
-
-Admin dashboard
-
-- view invoices
-- filter by status
-- update status
-- view history
-- run pipeline
-
-Logging
-
-- centralized logging
-- request tracing using REQ IDs
-- logs API, pipeline, and repository actions
-
-IBM i preparation
-
-- ODBC connection stub
-- DB2 ping endpoint
+- File ingestion pipeline
+- Invoice validation
+- File routing
+- SQLite indexing
+- IBM i DB2 integration
+- Admin dashboard
+- Structured logging
+- REST API
 
 ---
 
-# Tech Stack
+# Architecture
 
-Backend
 
-Python  
-FastAPI  
-SQLite  
-Uvicorn  
+Dropzone → Pipeline → SQLite + DB2 → API → Dashboard
 
-Frontend
 
-HTML  
-JavaScript  
+---
 
-Database
+# Technology
 
-SQLite
+Backend:
 
-Future integration
+- Python
+- FastAPI
+- pyodbc
+- sqlite3
 
-IBM i (PUB400)  
-DB2 for i via ODBC
+Frontend:
+
+- HTML
+- JavaScript
+
+Enterprise Integration:
+
+- IBM i
+- DB2
+- ODBC
 
 ---
 
 # Project Structure
+
+
 src/
 api.py
 pipeline.py
 logger.py
-
-services/
-invoice_service.py
-
-repositories/
-invoice_repository.py
-
 ibmi/
-db2_client.py
 
 data/
 dropzone_in
 ready
 rejected
-index.db
-
-logs/
-
----
-
-# Running the API
-
-Start server:
-python -m uvicorn src.api
 
 
 ---
 
-# Running the Pipeline
+# Running Pipeline
 
 
-python src/pipeline.py
-
-
-Processes files from:
-
-
-data/dropzone_in
+python -m src.pipeline
 
 
 ---
 
-# Admin Dashboard
+# Running API
 
-Simple HTML dashboard for managing invoices.
+
+uvicorn src.api:app --reload
+
+
+---
+
+# IBM i Integration
+
+Server:
+
+
+pub400.com
+
+
+Driver:
+
+
+IBM i Access ODBC Driver
+
+
+Table:
+
+
+PATAKI221.INVOICE_PIPELINE
+
+
+---
+
+# Dashboard
+
+Open:
+
+
+/admin
+
 
 Features:
 
-- view invoices
-- change invoice status
-- view metrics
-- view history
-- run pipeline
+- invoice table
+- status transitions
+- metrics
+- pipeline trigger
 
 ---
 
-# Future Work
+# Roadmap
 
-- IBM i DB2 integration
-- ODBC DSN configuration
-- invoice synchronization with DB2
-- improved UI
+- DB2 status updates
+- queue workers
+- Docker deployment
 - authentication
