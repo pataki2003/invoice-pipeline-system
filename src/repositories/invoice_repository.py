@@ -1,5 +1,5 @@
 import sqlite3
-from src.logger import log_line
+from ..logger import log_line
 
 
 def get_invoice(conn: sqlite3.Connection, invoice_id: int):

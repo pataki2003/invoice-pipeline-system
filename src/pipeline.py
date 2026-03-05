@@ -1,11 +1,11 @@
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime
 import re
 import sqlite3
-import csv
-from logger import log_line
 import os
-from logger import set_request_id
+
+from .logger import log_line, set_request_id
+from .ibmi.db2_writer import insert_invoice as db2_insert_invoice
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 
@@ -97,6 +97,11 @@ def process_dropzone():
                 db_msg = "DB+1" if inserted == 1 else "DB=0(dup)"
                 print(f"{status:<8}| {f.name} -> {dest.name} | {db_msg}")
                 log_line("PIPELINE", "INFO", f"{status} {f.name} -> {dest.name} ({db_msg})")
+                
+                try:
+                    db2_insert_invoice(original_name=f.name, status=status, final_name=dest.name, created_at=ts)
+                except Exception as e:
+                    log_line("IBMI", "ERROR", f"DB2 insert failed for {f.name}: {e}")
 
             except Exception as e:
                 # Ha valami nagyon félremegy egy fájllal, ne álljon le az egész futás

@@ -6,7 +6,7 @@ def get_connection():
     return pyodbc.connect(
         "DSN=PUB400;"
         "UID=PATAKI22;"
-        "PWD=8tMbrjW",
+        "PWD=ysd-k9-w!8tMbrjW",
         autocommit=True
     )
 
