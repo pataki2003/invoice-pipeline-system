@@ -1,27 +1,33 @@
-import os
 import pyodbc
-from src.logger import log_line
 
-# DSN alapú csatlakozás (Windows ODBC Data Sources)
-# A DSN-t majd később hozzuk létre: pl. "PUB400_DB2"
-DSN_NAME = os.environ.get("PUB400_DSN", "PUB400_DB2")
+SCHEMA = "PATAKI221"
 
+def get_connection():
+    return pyodbc.connect(
+        "DSN=PUB400;"
+        "UID=PATAKI22;"
+        "PWD=8tMbrjW",
+        autocommit=True
+    )
 
-def get_conn():
-    log_line("IBMI", "INFO", f"DB2 connect via DSN={DSN_NAME}")
-    # DSN beállítás: ODBC Data Source Administrator
-    return pyodbc.connect(f"DSN={DSN_NAME};", autocommit=True)
-
-
-def ping() -> dict:
-    # IBM i DB2 “dummy” query. Név változhat, de ez a klasszikus minta.
-    sql = "SELECT CURRENT DATE AS today FROM SYSIBM.SYSDUMMY1"
-
-    conn = get_conn()
+def main():
+    conn = get_connection()
     try:
         cur = conn.cursor()
-        cur.execute(sql)
-        row = cur.fetchone()
-        return {"status": "ok", "today": str(row[0])}
+
+        cur.execute(f"""
+            INSERT INTO {SCHEMA}.INVOICE_PIPELINE
+            (ORIGINAL_NAME, STATUS, FINAL_NAME, CREATED_AT)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        """, ("invoice_test.pdf", "READY", "invoice_test.pdf"))
+
+        print("Inserted 1 row into DB2.")
+
+        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.INVOICE_PIPELINE")
+        print("Total rows:", cur.fetchone()[0])
+
     finally:
         conn.close()
+
+if __name__ == "__main__":
+    main()
