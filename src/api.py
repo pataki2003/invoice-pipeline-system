@@ -21,7 +21,13 @@ from fastapi.responses import HTMLResponse
 import os
 from src.logger import get_request_id
 import time
-from .ibmi.db2_reader import list_invoices as db2_list_invoices
+from .ibmi.db2_reader import (
+    list_invoices as db2_list_invoices,
+    get_invoice as db2_get_invoice,
+    update_invoice_status as db2_update_invoice_status,
+    get_status_metrics as db2_get_status_metrics,
+)
+from .ibmi.db2_reader import update_invoice_status as db2_update_status
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -251,11 +257,62 @@ def ibmi_discovery():
 
     
 @app.get("/ibmi/invoices")
-def ibmi_invoices(limit: int = Query(default=50, ge=1, le=500)):
-    log_line("API", "INFO", f"ibmi_invoices limit={limit}")
+def ibmi_invoices(
+    status: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+):
+    s = status.upper() if status else None
+    log_line("API", "INFO", f"ibmi_invoices status={s} limit={limit}")
     try:
-        items = db2_list_invoices(limit=limit)
+        items = db2_list_invoices(limit=limit, status=s)
         return items
     except Exception as e:
         log_line("API", "ERROR", f"ibmi_invoices failed: {e}")
         return {"error": str(e)}
+    
+
+@app.patch("/ibmi/invoices/{invoice_id}/status")
+def ibmi_update_status(invoice_id: int, status: str):
+    new_status = status.upper()
+
+    if not validate_status(new_status):
+        log_line("API", "WARN", f"ibmi_update_status invalid status={status} id={invoice_id}")
+        return {"error": "invalid status"}
+
+    log_line("API", "INFO", f"ibmi_update_status id={invoice_id} -> {new_status}")
+
+    try:
+        current = db2_get_invoice(invoice_id)
+        if current is None:
+            log_line("API", "WARN", f"ibmi_update_status invoice not found id={invoice_id}")
+            return {"error": "invoice not found"}
+
+        old_status = current["status"]
+
+        check = validate_transition(old_status, new_status)
+        if not check["valid"]:
+            log_line("API", "WARN", f"ibmi invalid transition {old_status} -> {new_status} id={invoice_id}")
+            return {
+                "error": f"invalid transition {old_status} -> {new_status}",
+                "allowed": check["allowed"],
+            }
+
+        updated = db2_update_invoice_status(invoice_id, new_status)
+        if updated == 0:
+            return {"error": "invoice not found"}
+
+        return db2_get_invoice(invoice_id)
+
+    except Exception as e:
+        log_line("API", "ERROR", f"ibmi_update_status failed: {e}")
+        return {"error": str(e)}
+    
+@app.get("/ibmi/metrics")
+def ibmi_metrics():
+    log_line("API", "INFO", "ibmi_metrics")
+    try:
+        return db2_get_status_metrics()
+    except Exception as e:
+        log_line("API", "ERROR", f"ibmi_metrics failed: {e}")
+        return {"error": str(e)}
+    

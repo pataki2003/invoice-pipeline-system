@@ -211,8 +211,11 @@
 
             try {
                 if (isDb2) {
-                    el.innerText = "metrics: (DB2 mode - n/a)";
-                    el.title = el.innerText;
+                    const r = await fetch(`${apiBase}/ibmi/metrics`);
+                    const data = await r.json();
+                    const txt = "metrics: " + JSON.stringify(data);
+                    el.innerText = txt;
+                    el.title = txt;
                     return;
                 }
 
@@ -279,13 +282,14 @@
             const source = document.getElementById("source").value;
             const isDb2 = (source === "db2");
 
-            if (isDb2) {
-                showError("DB2 mode: status update nincs bekötve még. Válts Local (SQLite) módra, ha kattintani akarsz.");
-                return;
-            }
+
 
             try {
-                const r = await fetch(`${apiBase}/invoices/${id}/status?status=${encodeURIComponent(status)}`, { method: "PATCH" });
+                const url = isDb2
+                    ? `${apiBase}/ibmi/invoices/${id}/status?status=${encodeURIComponent(status)}`
+                    : `${apiBase}/invoices/${id}/status?status=${encodeURIComponent(status)}`;
+
+                const r = await fetch(url, { method: "PATCH" });
                 const data = await r.json();
 
                 if (!r.ok || data.error) {
