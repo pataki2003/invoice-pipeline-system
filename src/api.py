@@ -27,6 +27,7 @@ from .ibmi.db2_reader import (
     update_invoice_status as db2_update_invoice_status,
     get_status_metrics as db2_get_status_metrics,
 )
+from .ibmi.actions import run_action as run_ibmi_action
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -205,6 +206,22 @@ def run_ibmi():
 
     log_line("API", "INFO", "ibmi run finished (stub)")
     return {"status": "ok", "message": "IBM i job simulated"}
+
+@app.post("/ibmi/actions/run")
+def ibmi_actions_run(action: str):
+    log_line("API", "INFO", f"ibmi_actions_run action={action}")
+
+    try:
+        result = run_ibmi_action(action)
+        if not result.get("ok", False):
+            log_line("API", "WARN", f"ibmi_actions_run failed: {result}")
+        else:
+            log_line("API", "INFO", f"ibmi_actions_run ok: {result}")
+        return result
+
+    except Exception as e:
+        log_line("API", "ERROR", f"ibmi_actions_run crashed: {e}")
+        return {"ok": False, "error": str(e)}
 
 @app.post("/pipeline/run")
 def run_pipeline():

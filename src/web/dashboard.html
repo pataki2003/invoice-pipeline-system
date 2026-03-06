@@ -190,9 +190,12 @@
             <button onclick="loadInvoices()">Refresh</button>
             <button onclick="runPipeline()">Run pipeline</button>
             <button onclick="runIbmi()">Run IBM i (stub)</button>
+            <button onclick="runIbmiAction('db2_ping')">IBM i action: db2_ping</button>
+            <button onclick="runIbmiAction('db2_metrics')">IBM i action: db2_metrics</button>
+            <button onclick="runIbmiAction('db2_list_invoices')">IBM i action: db2_list_invoices</button>
+            <button onclick="runIbmiAction('machine_info')">IBM i action: machine_info</button>
             <button onclick="ibmiDiscovery()">IBM i discovery</button>
         </div>
-
         <span class="pill" id="metrics" title="metrics">metrics: ...</span>
     </div>
 
@@ -395,6 +398,25 @@
                 }
             } catch (e) {
                 showError("Failed to run IBM i: " + e.message);
+            }
+        }
+
+        async function runIbmiAction(action) {
+            clearError();
+            try {
+                const r = await fetch(`${apiBase}/ibmi/actions/run?action=${encodeURIComponent(action)}`, {
+                    method: "POST"
+                });
+                const data = await r.json();
+
+                document.getElementById("history").innerText = JSON.stringify(data, null, 2);
+
+                if (!r.ok || data.error || data.ok === false) {
+                    showError(`IBM i action failed: ${JSON.stringify(data)}`);
+                    return;
+                }
+            } catch (e) {
+                showError("Failed to run IBM i action: " + e.message);
             }
         }
 
