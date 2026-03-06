@@ -115,20 +115,3 @@ def get_status_metrics():
         return {str(r.STATUS).strip(): int(r.CNT) for r in rows}
     finally:
         conn.close()
-
-def update_invoice_status(invoice_id: int, status: str) -> int:
-    schema = get_schema()
-    sql = f"""
-        UPDATE {schema}.INVOICE_PIPELINE
-        SET STATUS = ?
-        WHERE ID = ?
-    """
-
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        log_line("IBMI", "INFO", f"DB2 update_status id={invoice_id} -> {status}")
-        cur.execute(sql, (status, invoice_id))
-        return cur.rowcount  # 1 ha siker, 0 ha nincs ilyen ID
-    finally:
-        conn.close()

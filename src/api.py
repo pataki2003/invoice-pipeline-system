@@ -27,7 +27,6 @@ from .ibmi.db2_reader import (
     update_invoice_status as db2_update_invoice_status,
     get_status_metrics as db2_get_status_metrics,
 )
-from .ibmi.db2_reader import update_invoice_status as db2_update_status
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
